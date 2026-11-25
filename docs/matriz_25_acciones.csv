@@ -1,0 +1,35 @@
+﻿Acción,Nombre,Precondición,Entrada,Resultado esperado,Resultado obtenido,Evidencia (ruta en BOSGAME),Estado
+1,Configurar el acceso a BOSGAME,App abierta,"IP, puerto, usuario, método",Se guarda en %APPDATA%\NODORA\settings.json sin contraseña; entradas inválidas rechazadas,,,Pendiente
+2,Identificar al estudiante,Conectado,"Nombre, grupo, identificador",identificacion.txt creado local y en BOSGAME; id con '..' o '/' rechazado,,,Pendiente
+3,Conectar y desconectar la sesión remota,BOSGAME encendido con SSH,Credenciales,Estado Conectado; fallo con mensaje claro; al desconectar se cierra SSH/SFTP,,,Pendiente
+4,Preparar la carpeta personal,Identidad guardada,—,"Carpetas Archivos, Respaldos, Restaurados, Evidencias, Informes, Temporales; lo existente se conserva",,,Pendiente
+5,Consultar información del sistema,Conectado,—,"Equipo, SO, arquitectura, procesador, memoria; no disponibles marcados",,,Pendiente
+6,Consultar el uso de CPU,Conectado,—,% con hora e intervalo de 1 s; varía al cambiar la carga,,,Pendiente
+7,Consultar el uso de RAM,Conectado,—,"Total, usada y disponible en unidades coherentes con la fuente indicada",,,Pendiente
+8,Consultar almacenamiento,Conectado,—,"Capacidad, usado y libre por unidad; coincide con el sistema remoto",,,Pendiente
+9,Consultar procesos,Conectado,Nombre del proceso de prueba,"Lista con PID, nombre y consumo; proceso de prueba resaltado",,,Pendiente
+10,Consultar configuración de red,Conectado,—,"Interfaces, IP, MAC, prefijo, gateway, DNS; campos vacíos como '—'",,,Pendiente
+11,Comprobar conectividad con BOSGAME,—,—,ICMP y TCP con tiempo; fallo = 'Sin respuesta' sin afirmar que está apagado,,,Pendiente
+12,Examinar puertos TCP autorizados,Conectado,Rango autorizado,Conexión aceptada / rechazada / sin respuesta (indeterminado); solo el rango,,,Pendiente
+13,Consultar servicios,Servicios definidos en Configuración,—,Nombre y estado real (Activo/Detenido/No encontrado),,,Pendiente
+14,Administrar un servicio de práctica,Servicio de práctica definido; cuenta administradora,Iniciar / detener / reiniciar,Estado posterior consultado tras cada operación,,,Pendiente
+15,"Diagnosticar, cerrar y restaurar el puerto de práctica",Escenario del docente activo,Opción de menú y parámetros,Instrucción real mostrada; cierre verificado (escucha + TCP rechazado); evidencia; restauración verificada,,,Pendiente
+16,Explorar la carpeta personal,Carpeta preparada,—,"Nombres, tipos y tamaños; '..' no sale de la carpeta",,,Pendiente
+17,Crear una subcarpeta,Carpeta preparada,Nombre,"Creada y comprobada; si existe, se informa sin borrar",,,Pendiente
+18,Enviar un archivo a BOSGAME,Conectado,Archivo local,"Avance, velocidad, tiempos; SHA-256 coincide; confirma antes de sobrescribir",,,Pendiente
+19,Descargar un archivo de BOSGAME,Archivo remoto existente,Archivo remoto,Se guarda en Descargas; SHA-256 coincide; incompleto = .part,,,Pendiente
+20,Copiar un archivo en BOSGAME,Archivo existente,Archivo,Copia con nombre libre; original intacto; SHA-256 igual,,,Pendiente
+21,Crear un respaldo,Archivos en la carpeta,—,Archivo de respaldo + manifiesto con fecha y SHA-256; no incluye Respaldos,,,Pendiente
+22,Restaurar un respaldo,Respaldo con manifiesto,Respaldo elegido,Restaurados/restaurado_<fecha>; archivos y sumas iguales al manifiesto,,,Pendiente
+23,Analizar y limpiar temporales de práctica,Archivos en Temporales,Selección + confirmación,Candidatos con tamaño; borra solo lo marcado; espacio liberado medido,,,Pendiente
+24,Guardar historial y generar el informe,Operaciones realizadas,—,actividad.csv e informe local y remoto; pendientes sincronizados sin duplicados,,,Pendiente
+25,Recuperar un archivo desde una ruta revelada,Ruta del docente,"Ruta, archivo",Lista y descarga a Recuperados; original intacto; SHA-256 coincide,,,Pendiente
+Aceptación,Credenciales incorrectas,,Conectar con contraseña errónea,Mensaje 'Autenticación rechazada'; sin sesión,,,Pendiente
+Aceptación,Permisos insuficientes,,Acción 14 con cuenta sin privilegios,Mensaje con pista de permisos; estado no cambia,,,Pendiente
+Aceptación,BOSGAME sin respuesta,,Apagar o desconectar el equipo,Tiempo agotado informado; la ventana no se congela,,,Pendiente
+Aceptación,Ruta inexistente / sin permiso,,Acción 25 con ruta inválida,'La ruta no existe' / 'Permiso insuficiente',,,Pendiente
+Aceptación,Interrupción de transferencia,,Cortar la red durante 18/19,Estado Incompleto; no se declara verificado,,,Pendiente
+Aceptación,Archivo vacío,,Enviar archivo de 0 bytes,Sin división entre cero; ETA 'Calculando…'; verificado,,,Pendiente
+Aceptación,Falta de espacio,,Enviar archivo mayor que el espacio libre,Error informado; sin archivo parcial declarado completo,,,Pendiente
+Aceptación,Nombre existente,,"Acciones 17, 18 y 20",Aviso / confirmación / nombre alternativo,,,Pendiente
+Aceptación,Fallo de restauración,,Dañar un respaldo y restaurar,'Respaldo dañado': suma distinta al manifiesto,,,Pendiente
