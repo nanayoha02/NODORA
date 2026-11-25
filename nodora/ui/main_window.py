@@ -11,11 +11,12 @@ from . import theme
 from .pages_a import ConnectionPage, DashboardPage, MonitorPage
 from .pages_b import FilesPage, NetworkPage
 from .pages_c import HistoryPage, SettingsPage
+from .pages_d import TrafficPage
 from .state import AppState
 from .widgets import Pill, muted, run_async
 
 NAV = [("Panel principal", "▦"), ("Conexión SSH", "›_"), ("Monitoreo", "∿"), ("Red y servicios", "⌗"),
-       ("Archivos y mantenimiento", "▭"), ("Historial e informes", "↺"), ("Configuración", "⚙")]
+       ("Tráfico de red", "≈"), ("Archivos y mantenimiento", "▭"), ("Historial e informes", "↺"), ("Configuración", "⚙")]
 
 
 class MainWindow(QMainWindow):
@@ -26,49 +27,68 @@ class MainWindow(QMainWindow):
         self.resize(1280, 820)
         if icon:
             self.setWindowIcon(icon)
+        pal = theme.palette()
+        self.rail = bool(pal.get("rail"))
         root = QWidget()
         root.setObjectName("root")
         self.setCentralWidget(root)
-        h = QHBoxLayout(root)
+        outer = QVBoxLayout(root)
+        m = pal["shell_margin"]
+        outer.setContentsMargins(m, m, m, m)
+        shell = QFrame()                       # panel ciruela con esquinas muy redondeadas sobre fondo lavanda
+        shell.setObjectName("shell")
+        outer.addWidget(shell)
+        h = QHBoxLayout(shell)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(0)
 
-        # ---- barra lateral
+        # ---- barra lateral (riel de iconos en Ciruela; con etiquetas en los demás temas)
         sb = QWidget()
         sb.setObjectName("sidebar")
-        sb.setFixedWidth(250)
+        sb.setFixedWidth(92 if self.rail else 250)
         sv = QVBoxLayout(sb)
-        sv.setContentsMargins(18, 24, 18, 18)
-        sv.setSpacing(4)
-        brand = QLabel(f'{APP_NAME} <span style="color:{theme.palette()["accent"]};">●</span>')
+        sv.setContentsMargins((20, 26, 20, 20) if self.rail else (18, 24, 18, 18))
+        sv.setSpacing(10 if self.rail else 4)
+        if self.rail:
+            brand = QLabel(f'N<span style="color:{pal["accent"]};">●</span>')
+        else:
+            brand = QLabel(f'{APP_NAME} <span style="color:{pal["accent"]};">●</span>')
         brand.setObjectName("brand")
         brand.setTextFormat(Qt.RichText)
-        sv.addWidget(brand)
-        sub = QLabel("REMOTE SYSTEM MANAGEMENT")
-        sub.setObjectName("eyebrow")
-        sv.addWidget(sub)
-        sv.addSpacing(22)
-        ws = QLabel("ESPACIO DE TRABAJO")
-        ws.setObjectName("eyebrow")
-        sv.addWidget(ws)
+        brand.setToolTip(f"{APP_NAME} · Remote System Management")
+        sv.addWidget(brand, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
+        if not self.rail:
+            sub = QLabel("REMOTE SYSTEM MANAGEMENT")
+            sub.setObjectName("eyebrow")
+            sv.addWidget(sub)
+            sv.addSpacing(22)
+            ws = QLabel("ESPACIO DE TRABAJO")
+            ws.setObjectName("eyebrow")
+            sv.addWidget(ws)
+        else:
+            sv.addSpacing(14)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.buttons = []
         for i, (name, ico) in enumerate(NAV):
-            b = QPushButton(f"{ico}   {name}")
-            b.setObjectName("nav")
+            b = QPushButton(ico if self.rail else f"{ico}   {name}")
+            b.setObjectName("rail" if self.rail else "nav")
+            b.setToolTip(name)
+            b.setAccessibleName(name)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
             self.group.addButton(b, i)
             self.buttons.append(b)
-            sv.addWidget(b)
+            sv.addWidget(b, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
         sv.addStretch()
-        tg = QLabel("Your System.\nOur Control.")
-        tg.setObjectName("tagline")
-        sv.addWidget(tg)
-        sv.addSpacing(10)
-        self.side_status = Pill("Sin conectar", "err")
-        sv.addWidget(self.side_status, alignment=Qt.AlignLeft)
+        if not self.rail:
+            tg = QLabel("Your System.\nOur Control.")
+            tg.setObjectName("tagline")
+            sv.addWidget(tg)
+            sv.addSpacing(10)
+        self.side_status = Pill("" if self.rail else "Sin conectar", "err")
+        self.side_status.setToolTip("Estado de la conexión")
+        sv.addWidget(self.side_status, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
         h.addWidget(sb)
 
         # ---- contenido
@@ -96,16 +116,16 @@ class MainWindow(QMainWindow):
         h.addLayout(right, 1)
 
         s = state
-        self.pages = [DashboardPage(s), ConnectionPage(s), MonitorPage(s), NetworkPage(s), FilesPage(s),
+        self.pages = [DashboardPage(s), ConnectionPage(s), MonitorPage(s), NetworkPage(s), TrafficPage(s), FilesPage(s),
                       HistoryPage(s), SettingsPage(s)]
         for p in self.pages:
             self.stack.addWidget(p)
         self.group.idClicked.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(self._page_changed)
         self.buttons[0].setChecked(True)
-        self.pages[0].goto_history.connect(lambda: self.go(5))
+        self.pages[0].goto_history.connect(lambda: self.go(6))
         self.pages[1].connection_changed.connect(self._connection)
-        self.pages[6].theme_changed.connect(self.apply_theme)
+        self.pages[7].theme_changed.connect(self.apply_theme)
         s.identity_changed.connect(self._refresh_top)
         s.hostkey_request.connect(self._hostkey)
         s.sample.connect(lambda d: [p.on_sample(d) for p in self.pages])
@@ -142,7 +162,7 @@ class MainWindow(QMainWindow):
         pg = self.pages[i]
         if hasattr(pg, "refresh_activity"):
             pg.refresh_activity()
-        if hasattr(pg, "reload") and i == 4:
+        if hasattr(pg, "reload") and i == 5:
             pg.reload()
         if hasattr(pg, "refresh_labels"):
             pg.refresh_labels()
@@ -155,10 +175,10 @@ class MainWindow(QMainWindow):
                               + (f" · {s.session.os_kind.capitalize()}" if s.session else ""))
         if s.is_connected:
             self.lbl_state.set("Conectado por SSH", "ok")
-            self.side_status.set(f"{s.cfg.host}", "ok")
+            self.side_status.set("" if self.rail else f"{s.cfg.host}", "ok")
         else:
             self.lbl_state.set("Desconectado", "err")
-            self.side_status.set("Sin conectar", "err")
+            self.side_status.set("" if self.rail else "Sin conectar", "err")
 
     def _connection(self, up: bool):
         self._refresh_top()

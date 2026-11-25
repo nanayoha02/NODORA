@@ -55,10 +55,10 @@ def ui(tmp_path_factory):
     from nodora.ui import widgets
     calls = []
     widgets.run_async = lambda fn, ok=None, err=None: (ok(fn()) if ok else fn())
-    from nodora.ui import pages_a, pages_b, pages_c, dialogs, main_window, state as st  # noqa: F401
-    for mod in (pages_a, pages_b, pages_c, dialogs):
+    from nodora.ui import pages_a, pages_b, pages_c, pages_d, dialogs, main_window, state as st  # noqa: F401
+    for mod in (pages_a, pages_b, pages_c, pages_d, dialogs):
         mod.run_async = widgets.run_async
-    return types.SimpleNamespace(pa=pages_a, pb=pages_b, pc=pages_c, d=dialogs, st=st, mw=main_window)
+    return types.SimpleNamespace(pa=pages_a, pb=pages_b, pc=pages_c, pd=pages_d, d=dialogs, st=st, mw=main_window)
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def state(ui, tmp_path, monkeypatch):
 
 def test_all_pages_construct(ui, state):
     for cls in (ui.pa.DashboardPage, ui.pa.ConnectionPage, ui.pa.MonitorPage, ui.pb.NetworkPage,
-                ui.pb.FilesPage, ui.pc.HistoryPage, ui.pc.SettingsPage):
+                ui.pb.FilesPage, ui.pc.HistoryPage, ui.pc.SettingsPage, ui.pd.TrafficPage):
         cls(state)
 
 
@@ -170,3 +170,57 @@ def test_main_window_constructs_and_samples(ui, state):
     assert state.sysinfo and w._sampling is False
     w._refresh_top()
     w._alerts({"cpu": 95})
+
+
+def test_traffic_page_live_and_capture(ui, state, monkeypatch, tmp_path):
+    import threading
+    from tests.test_traffic import _install_tcpdump
+    from tests.test_pcap import make_pcap, FRAMES
+    state.lab.prepare_folder()
+    t = ui.pd.TrafficPage(state)
+    t.iface.currentData = lambda: ""
+    t.iface.itemData = lambda i: ""
+    t.iface.count = lambda: 1
+    t._tick()
+    t._tick()
+    assert t.mon.prev is not None
+    t._conns()
+    t._log()
+    _install_tcpdump(tmp_path, monkeypatch, make_pcap(FRAMES))
+    t.proto.currentData = lambda: "tcp"
+    t.port.text = lambda: ""
+    t.host.text = lambda: ""
+    t.secs.value = lambda: 5
+    t.maxp.value = lambda: 500
+    t._capture()
+    assert len(t.packets) == 6 and t.last_local.endswith(".pcap")
+    t.flt.text = lambda: "dns"
+    t.tbl.rowCount = lambda: 0
+    t._filter()
+
+
+def test_plum_theme_and_rail_mainwindow(ui, state):
+    from nodora.ui import theme
+    for name in ("plum", "light", "dark", "system"):
+        pal = theme.set_theme(name, system_is_dark=True)
+        assert "QPushButton#primary" in theme.stylesheet()
+        assert pal["backdrop"] and len(pal["pastel"]) == 3
+    theme.set_theme("plum")
+    assert theme.palette()["rail"] and theme.palette()["primary_bg"] == "#FFFFFF"
+    state.sample = state.hostkey_request = _S()
+    ui.mw.run_async = lambda fn, ok=None, err=None: (ok(fn()) if ok else fn())
+    w = ui.mw.MainWindow(state)
+    assert w.rail and len(w.buttons) == len(ui.mw.NAV) == len(w.pages) == 8
+    w._refresh_top()
+    theme.set_theme("light")
+    w2 = ui.mw.MainWindow(state)
+    assert not w2.rail
+    theme.set_theme("plum")
+
+
+def test_pastel_tile_and_dashboard_tiles(ui, state):
+    from nodora.ui import widgets
+    t = widgets.PastelTile(1)
+    t.add(_S())
+    d = ui.pa.DashboardPage(state)
+    d.on_sample({"cpu": 33.0, "ram": {"used": 5, "free": 5, "total": 10}, "disks": [{"name": "C:", "used": 1, "free": 1, "size": 2}]})

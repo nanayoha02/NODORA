@@ -160,7 +160,7 @@ class SettingsPage(Page):
         a = Card("Apariencia", "Un entorno claro para mantener el foco.")
         row = QHBoxLayout()
         self.grp = QButtonGroup(self)
-        for i, (k, lbl) in enumerate((("light", "Claro"), ("dark", "Oscuro"), ("system", "Sistema"))):
+        for i, (k, lbl) in enumerate((("plum", "Ciruela"), ("light", "Claro"), ("dark", "Oscuro"), ("system", "Sistema"))):
             b = QPushButton(lbl)
             b.setCheckable(True)
             b.setChecked(c.theme == k)
@@ -257,6 +257,7 @@ class SettingsPage(Page):
         self.state.cfg.theme = k
         self.state.cfg.save()
         self.theme_changed.emit()
+        self.msg.setText("✔ Estilo guardado. Reinicie NODORA para aplicar barra lateral y tarjetas por completo.")
 
     def save(self):
         c = self.state.cfg

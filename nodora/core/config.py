@@ -41,7 +41,7 @@ class Settings:
     practice_process: str = ""                          # nombre de proceso de práctica (opcional)
     revealed_path: str = ""                             # acción 25 (puede quedar vacío)
     # Preferencias de interfaz
-    theme: str = "light"                   # light | dark | system
+    theme: str = "plum"                    # plum | light | dark | system
     start_with_windows: bool = False
     minimize_to_tray: bool = True
     notify_alerts: bool = True

@@ -193,6 +193,49 @@ class WindowsProfile:
     def make_dir(self, path: str) -> Cmd:
         return self._c(f"New-Item -ItemType Directory -Force -Path {q_ps(path)}|Out-Null")
 
+    # ---- tráfico y captura (acciones 26 y 27)
+    def net_counters(self) -> Cmd:
+        return self._c("$r=Get-NetAdapterStatistics|ForEach-Object{[pscustomobject]@{name=$_.Name;"
+                       "rx=[int64]$_.ReceivedBytes;tx=[int64]$_.SentBytes}};"
+                       "ConvertTo-Json -InputObject @($r) -Compress")
+
+    def parse_net_counters(self, out: str) -> dict:
+        return {n["name"]: (int(n["rx"] or 0), int(n["tx"] or 0)) for n in _as_list(_json(out))}
+
+    def connections(self) -> Cmd:
+        return self._c("$r=Get-NetTCPConnection -State Established|ForEach-Object{"
+                       "$p=Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue;[pscustomobject]@{"
+                       "laddr=$_.LocalAddress;lport=$_.LocalPort;raddr=$_.RemoteAddress;rport=$_.RemotePort;"
+                       "pid=$_.OwningProcess;process=$p.ProcessName}};ConvertTo-Json -InputObject @($r) -Compress")
+
+    def parse_connections(self, out: str) -> list[dict]:
+        return [{"local": f"{c['laddr']}:{c['lport']}", "remote": f"{c['raddr']}:{c['rport']}",
+                 "pid": int(c["pid"] or 0), "process": c.get("process") or ""} for c in _as_list(_json(out))]
+
+    def capture(self, etl: str, pcap: str, seconds: int, proto: str, port, host) -> Cmd:
+        """pktmon (incluido en Windows 10 1809+/11; requiere administrador). La sintaxis de pktmon
+        cambia entre versiones: si falla, el mensaje de error se muestra tal cual."""
+        f = ""
+        if proto != "any" or port or host:
+            args = ["filter", "add", "NODORA"]
+            if proto != "any":
+                args += ["-t", proto.upper()]
+            if port:
+                args += ["-p", str(int(port))]
+            if host:
+                args += ["-i", host]
+            f = "pktmon " + " ".join(args) + "|Out-Null;"
+        return self._c(
+            "pktmon stop|Out-Null;pktmon filter remove|Out-Null;"
+            f"{f}pktmon start --capture --pkt-size 128 --file-size 32 --file-name {q_ps(etl)}|Out-Null;"
+            "if($LASTEXITCODE -ne 0){Write-Error 'PKTMON_NO_INICIO (¿cuenta administradora?)';exit 5};"
+            f"Start-Sleep -Seconds {int(seconds)};pktmon stop|Out-Null;"
+            f"pktmon etl2pcap {q_ps(etl)} --out {q_ps(pcap)}|Out-Null;"
+            f"if(-not(Test-Path -LiteralPath {q_ps(pcap)})){{Write-Error 'CAPTURA_NO_GENERADA';exit 4}}")
+
+    def capture_ext(self) -> str:
+        return ".pcapng"
+
 
 # ======================================================================= Linux
 class LinuxProfile:
@@ -369,6 +412,53 @@ class LinuxProfile:
 
     def make_dir(self, path: str) -> Cmd:
         return self._c(f"mkdir -p {shlex.quote(path)}")
+
+    # ---- tráfico y captura (acciones 26 y 27)
+    def net_counters(self) -> Cmd:
+        return self._c("cat /proc/net/dev")
+
+    def parse_net_counters(self, out: str) -> dict:
+        res = {}
+        for l in out.splitlines():
+            if ":" not in l:
+                continue
+            name, _, rest = l.partition(":")
+            f = rest.split()
+            if len(f) >= 9 and f[0].isdigit():
+                res[name.strip()] = (int(f[0]), int(f[8]))
+        return res
+
+    def connections(self) -> Cmd:
+        return self._c("ss -tnpH state established")
+
+    def parse_connections(self, out: str) -> list[dict]:
+        res = []
+        for l in out.splitlines():
+            p = l.split()
+            if p and not p[0].isdigit():      # algunas versiones de ss anteponen la columna de estado (ESTAB)
+                p = p[1:]
+            if len(p) >= 4:
+                m = re.search(r'\("([^"]+)",pid=(\d+)', l)
+                res.append({"local": p[2], "remote": p[3], "pid": int(m.group(2)) if m else 0,
+                            "process": m.group(1) if m else ""})
+        return res
+
+    def capture(self, etl: str, pcap: str, seconds: int, proto: str, port, host, max_packets: int = 2000) -> Cmd:
+        parts = []
+        if proto != "any":
+            parts.append(proto)
+        if host:
+            parts.append(f"host {host}")
+        if port:
+            parts.append(f"port {int(port)}")
+        bpf = " and ".join(parts)
+        # `timeout` devuelve 124 al cumplirse el tiempo: es el final normal de una captura temporizada
+        cmd = (f"timeout {int(seconds)} tcpdump -i any -n -Z root -s 128 -c {int(max_packets)} -w {shlex.quote(pcap)}"
+               + (f" {shlex.quote(bpf)}" if bpf else ""))
+        return self._c(self._priv(cmd))
+
+    def capture_ext(self) -> str:
+        return ".pcap"
 
 
 def profile_for(kind: str):

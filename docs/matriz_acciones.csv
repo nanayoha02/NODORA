@@ -24,6 +24,8 @@
 23,Analizar y limpiar temporales de práctica,Archivos en Temporales,Selección + confirmación,Candidatos con tamaño; borra solo lo marcado; espacio liberado medido,,,Pendiente
 24,Guardar historial y generar el informe,Operaciones realizadas,—,actividad.csv e informe local y remoto; pendientes sincronizados sin duplicados,,,Pendiente
 25,Recuperar un archivo desde una ruta revelada,Ruta del docente,"Ruta, archivo",Lista y descarga a Recuperados; original intacto; SHA-256 coincide,,,Pendiente
+26,Medir el tráfico de red (en vivo) y conexiones TCP,Conectado,Interfaz (opcional),Gráfica de bytes/s recibidos y enviados con tasas calculadas sobre el tiempo real; conexiones establecidas con PID y proceso; la medición se registra,,,Pendiente
+27,Captura de paquetes (descargable a Wireshark),Conectado; cuenta administradora/root; pktmon (Windows) o tcpdump (Linux),"Protocolo, puerto, IP, segundos","Archivo .pcap/.pcapng creado en Evidencias de BOSGAME, descargado con SHA-256 verificado, lista de paquetes y resumen por protocolo; abre en Wireshark",,,Pendiente
 Aceptación,Credenciales incorrectas,,Conectar con contraseña errónea,Mensaje 'Autenticación rechazada'; sin sesión,,,Pendiente
 Aceptación,Permisos insuficientes,,Acción 14 con cuenta sin privilegios,Mensaje con pista de permisos; estado no cambia,,,Pendiente
 Aceptación,BOSGAME sin respuesta,,Apagar o desconectar el equipo,Tiempo agotado informado; la ventana no se congela,,,Pendiente
@@ -33,3 +35,5 @@ Aceptación,Archivo vacío,,Enviar archivo de 0 bytes,Sin división entre cero; 
 Aceptación,Falta de espacio,,Enviar archivo mayor que el espacio libre,Error informado; sin archivo parcial declarado completo,,,Pendiente
 Aceptación,Nombre existente,,"Acciones 17, 18 y 20",Aviso / confirmación / nombre alternativo,,,Pendiente
 Aceptación,Fallo de restauración,,Dañar un respaldo y restaurar,'Respaldo dañado': suma distinta al manifiesto,,,Pendiente
+Aceptación,Captura sin privilegios,,Acción 27 con cuenta sin administrador,Mensaje que indica que se necesitan privilegios; no se declara capturada,,,Pendiente
+Aceptación,Captura sin tráfico,,Acción 27 con un filtro que no coincide,"Se informa 'No hubo tráfico'; 0 paquetes, sin error falso",,,Pendiente

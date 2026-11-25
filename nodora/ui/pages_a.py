@@ -13,7 +13,7 @@ from ..core.config import Settings
 from ..core.session import tcp_probe
 from ..core.validators import ValidationError, validate_host, validate_port, validate_student_id
 from . import theme
-from .widgets import (Card, Msg, Pill, Sparkline, eyebrow, fill_table, fmt_bytes, fmt_uptime, make_table, muted,
+from .widgets import (Card, Msg, PastelTile, Pill, Sparkline, eyebrow, fill_table, fmt_bytes, fmt_uptime, make_table, muted,
                       run_async)
 
 
@@ -133,7 +133,8 @@ class DashboardPage(Page):
         return lay, val, sub
 
     def _tile(self, title, val, sub, bar=False):
-        c = Card()
+        idx = {"CPU": 0, "Memoria RAM": 1}.get(title, 2)
+        c = PastelTile(idx)
         c.add(eyebrow(title))
         n = QLabel(val)
         n.setObjectName("bigNumber")
@@ -146,7 +147,8 @@ class DashboardPage(Page):
             pb.setTextVisible(False)
             c.add(pb)
             return n, s, (c, pb)
-        sp = Sparkline(theme.palette()["accent"] if title == "CPU" else theme.palette()["chart2"])
+        sp = Sparkline(c.ink, ink=c.ink)
+        sp.setMinimumHeight(60)
         c.add(sp)
         return n, s, (c, sp)
 

@@ -127,10 +127,10 @@ def fmt_uptime(sec: Optional[int]) -> str:
 class Sparkline(QWidget):
     """Línea con área; datos reales (0-100 por defecto)."""
 
-    def __init__(self, color: str = "", maxv: float = 100.0, parent=None, axes: bool = False):
+    def __init__(self, color: str = "", maxv: float = 100.0, parent=None, axes: bool = False, ink: str = ""):
         super().__init__(parent)
         self.data: list[float] = []
-        self.color, self.maxv, self.axes = color, maxv, axes
+        self.color, self.maxv, self.axes, self.ink = color, maxv, axes, ink
         self.setMinimumHeight(150 if axes else 40)
 
     def push(self, v: float, limit: int = 60) -> None:
@@ -156,7 +156,7 @@ class Sparkline(QWidget):
             p.drawText(QRectF(r.left(), self.height() - 16, 120, 14), Qt.AlignLeft, "Últimos 60 muestras")
             p.drawText(QRectF(r.right() - 60, self.height() - 16, 60, 14), Qt.AlignRight, "Ahora")
         if len(self.data) < 2:
-            p.setPen(QColor(c["muted"]))
+            p.setPen(QColor(self.ink or c["muted"]))
             p.drawText(r, Qt.AlignCenter, "Calculando…")
             return
         n = len(self.data)
@@ -251,3 +251,103 @@ class Msg:
     @staticmethod
     def ask(parent, text) -> bool:
         return QMessageBox.question(parent, "NODORA", text) == QMessageBox.Yes
+
+
+# ----------------------------------------------------------------------------- tasas de tráfico
+def fmt_rate(bps: float) -> str:
+    for u in ("B/s", "KiB/s", "MiB/s", "GiB/s"):
+        if bps < 1024 or u == "GiB/s":
+            return f"{bps:.0f} {u}" if u == "B/s" else f"{bps:.1f} {u}"
+        bps /= 1024
+    return str(bps)
+
+
+def _nice_max(v: float) -> float:
+    if v <= 0:
+        return 1024.0
+    import math
+    e = 10 ** math.floor(math.log10(v))
+    for m in (1, 2, 5, 10):
+        if v <= m * e:
+            return m * e
+    return 10 * e
+
+
+class RateChart(QWidget):
+    """Dos líneas (recibido / enviado) con escala automática. Datos reales en bytes por segundo."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rx: list[float] = []
+        self.tx: list[float] = []
+        self.setMinimumHeight(190)
+
+    def clear(self) -> None:
+        self.rx, self.tx = [], []
+        self.update()
+
+    def push(self, rx: float, tx: float, limit: int = 90) -> None:
+        self.rx = (self.rx + [rx])[-limit:]
+        self.tx = (self.tx + [tx])[-limit:]
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        c = theme.palette()
+        r = QRectF(self.rect()).adjusted(74, 8, -6, -22)
+        top = _nice_max(max(self.rx + self.tx + [0]))
+        p.setPen(QPen(QColor(c["border"]), 1))
+        for frac in (0, 0.5, 1):
+            y = r.top() + r.height() * frac
+            p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+            p.setPen(QColor(c["muted"]))
+            p.drawText(QRectF(0, y - 8, 70, 16), Qt.AlignRight | Qt.AlignVCenter, fmt_rate(top * (1 - frac)))
+            p.setPen(QPen(QColor(c["border"]), 1))
+        p.setPen(QColor(c["muted"]))
+        p.drawText(QRectF(r.left(), self.height() - 18, 160, 14), Qt.AlignLeft, "Últimos 90 s")
+        p.drawText(QRectF(r.right() - 60, self.height() - 18, 60, 14), Qt.AlignRight, "Ahora")
+        if len(self.rx) < 2:
+            p.drawText(r, Qt.AlignCenter, "Calculando…")
+            return
+        n = len(self.rx)
+        for data, col in ((self.rx, c["accent"]), (self.tx, c["chart2"])):
+            pts = [QPointF(r.left() + r.width() * i / (n - 1), r.bottom() - r.height() * v / top) for i, v in enumerate(data)]
+            path = QPainterPath(pts[0])
+            for pt in pts[1:]:
+                path.lineTo(pt)
+            p.setPen(QPen(QColor(col), 2))
+            p.drawPath(path)
+
+
+# ----------------------------------------------------------------------------- tarjeta pastel con muesca
+class PastelTile(QWidget):
+    """Tarjeta de color pastel con una muesca suave en el borde superior (estilo Ciruela).
+    El texto interior usa tinta oscura para mantener el contraste sobre el pastel."""
+
+    def __init__(self, idx: int = 0, parent=None):
+        super().__init__(parent)
+        pal = theme.palette()
+        self.fill = QColor(pal["pastel"][idx % len(pal["pastel"])])
+        self.ink = pal["on_pastel"]
+        self.v = QVBoxLayout(self)
+        self.v.setContentsMargins(20, 34, 20, 18)
+        self.v.setSpacing(6)
+        self.setStyleSheet(f"QLabel {{ color: {self.ink}; background: transparent; }} "
+                           f"QLabel#eyebrow {{ color: {self.ink}; }} QLabel#muted {{ color: {self.ink}; }} "
+                           f"QProgressBar {{ background: rgba(42,36,51,45); }} "
+                           f"QProgressBar::chunk {{ background: {self.ink}; }}")
+
+    def add(self, w) -> None:
+        self.v.addWidget(w)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        body = QPainterPath()
+        body.addRoundedRect(r, 24, 24)
+        w = min(150.0, r.width() * 0.5)
+        cut = QPainterPath()
+        cut.addRoundedRect(QRectF(r.center().x() - w / 2, r.top() - 30, w, 52), 24, 24)   # muesca superior
+        p.fillPath(body.subtracted(cut), QBrush(self.fill))
