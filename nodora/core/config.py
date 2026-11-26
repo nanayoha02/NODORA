@@ -41,13 +41,19 @@ class Settings:
     practice_process: str = ""                          # nombre de proceso de práctica (opcional)
     revealed_path: str = ""                             # acción 25 (puede quedar vacío)
     # Preferencias de interfaz
-    theme: str = "plum"                    # plum | light | dark | system
+    theme: str = "plum"                    # smart | plum | lime | night | ios | sage | plush | light | dark | system
     start_with_windows: bool = False
     minimize_to_tray: bool = True
     notify_alerts: bool = True
     notify_transfers: bool = True
     transfer_unit: str = "MiB/s"           # MiB/s | MB/s
     history_days: int = 90
+    # Personalización del estilo (vacío = el del tema)
+    custom_accent: str = ""                # #RRGGBB
+    custom_text: str = ""                  # #RRGGBB
+    font_family: str = ""                  # "" = predeterminada
+    font_size: int = 13
+    corners: str = "soft"                  # square | soft | round
 
     def save(self) -> None:
         data = asdict(self)
@@ -67,7 +73,27 @@ class Settings:
                         setattr(s, k, v)
             except (OSError, ValueError):
                 pass
+        s.sanitize_style()
         return s
+
+    def sanitize_style(self) -> None:
+        from .style_math import CORNERS, FONTS, valid_hex
+        if not valid_hex(self.custom_accent):
+            self.custom_accent = ""
+        if not valid_hex(self.custom_text):
+            self.custom_text = ""
+        if self.font_family not in FONTS:
+            self.font_family = ""
+        try:
+            self.font_size = max(11, min(18, int(self.font_size)))
+        except (TypeError, ValueError):
+            self.font_size = 13
+        if self.corners not in CORNERS:
+            self.corners = "soft"
+
+    def style_key(self) -> tuple:
+        """Cambia cuando algo del aspecto cambia (el estilo completo se aplica al reiniciar)."""
+        return (self.theme, self.custom_accent, self.custom_text, self.font_family, self.font_size, self.corners)
 
     # utilidades
     def split_list(self, text: str) -> list[str]:

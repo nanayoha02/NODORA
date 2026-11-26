@@ -100,4 +100,4 @@ restauración, permisos y elevación en Windows, integridad por hash y diferenci
 Tema **Ciruela** (predeterminado): fondo ciruela sobre lavanda, tarjetas pastel con muesca superior, botones en píldora y barra lateral de iconos (el nombre de cada sección aparece al pasar el cursor). Se cambia en Configuración › Apariencia (Ciruela, Claro, Oscuro, Sistema); reinicie NODORA para aplicar la barra lateral. La tipografía usa Unbounded, Syne o Space Grotesk si están instaladas y, si no, Segoe UI.
 
 ## 11. Créditos y licencias
-Qt for Python / PySide6 (LGPL-3.0) · paramiko (LGPL-2.1) · Inter (SIL OFL 1.1, opcional). Logo e icono: diseño original (`tools/make_assets.py`).
+Qt for Python / PySide6 (LGPL-3.0) · paramiko (LGPL-2.1) · Inter (SIL OFL 1.1, opcional). Logo e icono: logo oficial de NODORA (`assets/nodora_logo_full.png`; los derivados se generan con `tools/make_assets.py`, que requiere Pillow y numpy).

@@ -6,12 +6,13 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
+from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QColorDialog, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QSpinBox, QVBoxLayout)
 
 from ..core import startup
 from ..core.config import APP_NAME, APP_VERSION
+from ..core.style_math import FONTS, contrast_fg
 from ..core.validators import ValidationError, safe_join, validate_port_range
 from . import theme
 from .pages_a import Page
@@ -160,7 +161,7 @@ class SettingsPage(Page):
         a = Card("Apariencia", "Un entorno claro para mantener el foco.")
         row = QHBoxLayout()
         self.grp = QButtonGroup(self)
-        for i, (k, lbl) in enumerate((("plum", "Ciruela"), ("light", "Claro"), ("dark", "Oscuro"), ("system", "Sistema"))):
+        for i, (k, lbl) in enumerate((("smart", "Smart"), ("plum", "Ciruela"), ("lime", "Lima"), ("night", "Noche"), ("ios", "iPhone"), ("sage", "Salvia"), ("plush", "Peluche"), ("light", "Claro"), ("dark", "Oscuro"), ("system", "Sistema"))):
             b = QPushButton(lbl)
             b.setCheckable(True)
             b.setChecked(c.theme == k)
@@ -171,6 +172,60 @@ class SettingsPage(Page):
             row.addWidget(b)
         a.addl(row)
         self.col.addWidget(a)
+
+        # ---- personalizar: colores, letras y estilo
+        pz = Card("Personalizar estilo", "Elige tu color de acento, el color y el tipo de letra, y qué tan redondeado se ve todo.")
+        pr = QHBoxLayout()
+        pr.addWidget(QLabel("Paletas rápidas:"))
+        for name, hexv in (("Índigo", "#5671E6"), ("Lima", "#A3E635"), ("Rosa", "#F28BA4"), ("Salvia", "#7F9F89"),
+                           ("Naranja", "#F59E0B"), ("Turquesa", "#14B8A6"), ("Violeta", "#8B5CF6"), ("Rojo", "#E5484D")):
+            sw = QPushButton()
+            sw.setFixedSize(30, 30)
+            sw.setToolTip(name)
+            sw.setCursor(Qt.PointingHandCursor)
+            sw.setStyleSheet(f"QPushButton {{ background: {hexv}; border: 2px solid transparent; border-radius: 15px; padding: 0; }}"
+                             f"QPushButton:hover {{ border-color: #FFFFFF; }}")
+            sw.clicked.connect(lambda _=False, h=hexv: self._pick("accent", h))
+            pr.addWidget(sw)
+        pr.addStretch()
+        pz.addl(pr)
+        cr = QHBoxLayout()
+        self.b_acc = QPushButton()
+        self.b_txt = QPushButton()
+        self.b_acc.clicked.connect(lambda: self._pick("accent"))
+        self.b_txt.clicked.connect(lambda: self._pick("text"))
+        b_rst = QPushButton("Restablecer colores")
+        b_rst.clicked.connect(self._reset_colors)
+        cr.addWidget(self.b_acc)
+        cr.addWidget(self.b_txt)
+        cr.addWidget(b_rst)
+        cr.addStretch()
+        pz.addl(cr)
+        self.cur_accent, self.cur_text = c.custom_accent, c.custom_text
+        self._paint_swatches()
+        pf = QFormLayout()
+        self.font_cb = QComboBox()
+        for fam in FONTS:
+            self.font_cb.addItem(fam or "Predeterminada del tema", fam)
+        self.font_cb.setCurrentIndex(max(0, self.font_cb.findData(c.font_family)))
+        self.font_sz = QSpinBox()
+        self.font_sz.setRange(11, 18)
+        self.font_sz.setSuffix(" px")
+        self.font_sz.setValue(c.font_size)
+        self.corn = QComboBox()
+        for lbl, v in (("Cuadradas", "square"), ("Suaves (predeterminado)", "soft"), ("Muy redondeadas", "round")):
+            self.corn.addItem(lbl, v)
+        self.corn.setCurrentIndex(max(0, self.corn.findData(c.corners)))
+        pf.addRow("Tipo de letra", self.font_cb)
+        pf.addRow("Tamaño de letra", self.font_sz)
+        pf.addRow("Esquinas", self.corn)
+        pz.addl(pf)
+        b_apply = QPushButton("Aplicar estilo")
+        b_apply.setObjectName("primary")
+        b_apply.clicked.connect(self._apply_style)
+        pz.add(b_apply)
+        pz.add(muted("Para ver todos los cambios NODORA se reinicia; tus colores quedan guardados en este equipo."))
+        self.col.addWidget(pz)
 
         g = Card("Preferencias generales", "Tu rutina, con menos pasos.")
         self.sw = QCheckBox("Iniciar NODORA con Windows")
@@ -252,6 +307,43 @@ class SettingsPage(Page):
         self.col.addWidget(ab)
         self.col.addStretch()
         self.b_save.clicked.connect(self.save)
+
+    def _paint_swatches(self):
+        for b, val, lbl in ((self.b_acc, self.cur_accent, "Color de acento"), (self.b_txt, self.cur_text, "Color de letras")):
+            shown = val or "tema"
+            b.setText(f"{lbl}: {shown}")
+            if val:
+                fg = contrast_fg(val)
+                b.setStyleSheet(f"QPushButton {{ background: {val}; color: {fg}; border-color: {val}; }}")
+            else:
+                b.setStyleSheet("")
+
+    def _pick(self, which, hexv=None):
+        if hexv is None:
+            cur = self.cur_accent if which == "accent" else self.cur_text
+            col = QColorDialog.getColor(QColor(cur or "#5671E6"), self, "Elige un color")
+            if not col.isValid():
+                return
+            hexv = col.name().upper()
+        if which == "accent":
+            self.cur_accent = hexv
+        else:
+            self.cur_text = hexv
+        self._paint_swatches()
+
+    def _reset_colors(self):
+        self.cur_accent = self.cur_text = ""
+        self._paint_swatches()
+
+    def _apply_style(self):
+        c = self.state.cfg
+        c.custom_accent, c.custom_text = self.cur_accent, self.cur_text
+        c.font_family, c.font_size = self.font_cb.currentData() or "", self.font_sz.value()
+        c.corners = self.corn.currentData() or "soft"
+        c.sanitize_style()
+        c.save()
+        self.theme_changed.emit()
+        self.msg.setText("✔ Estilo guardado.")
 
     def _set_theme(self, k):
         self.state.cfg.theme = k

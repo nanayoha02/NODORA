@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, QPointF,
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QBrush, QLinearGradient
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView, QAbstractItemView,
-                               QMessageBox)
+                               QMessageBox, QGraphicsDropShadowEffect)
 
 from . import theme
 
@@ -55,10 +55,23 @@ def run_async(fn: Callable, on_done: Optional[Callable] = None, on_error: Option
 
 
 # ----------------------------------------------------------------------------- tarjetas
+def elevate(w, blur: int = 26, dy: int = 7) -> None:
+    """Sombra suave para que la tarjeta «flote» sobre el fondo (solo en temas con float=True)."""
+    if not theme.palette().get("float"):
+        return
+    fx = QGraphicsDropShadowEffect(w)
+    fx.setBlurRadius(blur)
+    fx.setOffset(0, dy)
+    fx.setColor(QColor(30, 45, 120, 46))
+    w.setGraphicsEffect(fx)
+
+
 class Card(QFrame):
-    def __init__(self, title: str = "", subtitle: str = "", parent=None):
+    def __init__(self, title: str = "", subtitle: str = "", parent=None, shadow: bool = True):
         super().__init__(parent)
         self.setObjectName("card")
+        if shadow:
+            elevate(self)
         self.v = QVBoxLayout(self)
         self.v.setContentsMargins(20, 18, 20, 18)
         self.v.setSpacing(10)
@@ -321,6 +334,49 @@ class RateChart(QWidget):
 
 
 # ----------------------------------------------------------------------------- tarjeta pastel con muesca
+class DonutGauge(QWidget):
+    """Medidor circular (porcentaje real 0-100). Admite push()/setValue() para usarse donde iba una gráfica o barra."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.value = 0.0
+        self.setMinimumHeight(110)
+
+    def push(self, v: float, limit: int = 0) -> None:
+        self.setValue(v)
+
+    def setValue(self, v) -> None:
+        self.value = max(0.0, min(100.0, float(v)))
+        self.update()
+
+    def paintEvent(self, _):
+        c = theme.palette()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        side = min(self.width(), self.height()) - 12
+        r = QRectF((self.width() - side) / 2, (self.height() - side) / 2, side, side)
+        r = r.adjusted(6, 6, -6, -6)
+        pen = QPen(QColor(c["border"]), 9)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawArc(r, 0, 360 * 16)
+        pen = QPen(QColor(c["accent"]), 9)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawArc(r, 90 * 16, int(-360 * 16 * self.value / 100.0))
+        p.setPen(QColor(c["text"]))
+        f = p.font()
+        f.setBold(True)
+        f.setPointSizeF(max(9.0, side / 6.0))
+        p.setFont(f)
+        p.drawText(r, Qt.AlignCenter, f"{self.value:.0f}%")
+
+
+def _alpha(color: str, a: int) -> str:
+    c = QColor(color)
+    return f"rgba({c.red()},{c.green()},{c.blue()},{a})"
+
+
 class PastelTile(QWidget):
     """Tarjeta de color pastel con una muesca suave en el borde superior (estilo Ciruela).
     El texto interior usa tinta oscura para mantener el contraste sobre el pastel."""
@@ -331,11 +387,14 @@ class PastelTile(QWidget):
         self.fill = QColor(pal["pastel"][idx % len(pal["pastel"])])
         self.ink = pal["on_pastel"]
         self.v = QVBoxLayout(self)
-        self.v.setContentsMargins(20, 34, 20, 18)
+        elevate(self, 22, 6)
+        self.notch = bool(pal.get("notch"))
+        self.edge = pal.get("tile_border")
+        self.v.setContentsMargins(20, 34 if self.notch else 20, 20, 18)
         self.v.setSpacing(6)
         self.setStyleSheet(f"QLabel {{ color: {self.ink}; background: transparent; }} "
                            f"QLabel#eyebrow {{ color: {self.ink}; }} QLabel#muted {{ color: {self.ink}; }} "
-                           f"QProgressBar {{ background: rgba(42,36,51,45); }} "
+                           f"QProgressBar {{ background: {_alpha(self.ink, 45)}; }} "
                            f"QProgressBar::chunk {{ background: {self.ink}; }}")
 
     def add(self, w) -> None:
@@ -347,7 +406,12 @@ class PastelTile(QWidget):
         r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
         body = QPainterPath()
         body.addRoundedRect(r, 24, 24)
-        w = min(150.0, r.width() * 0.5)
-        cut = QPainterPath()
-        cut.addRoundedRect(QRectF(r.center().x() - w / 2, r.top() - 30, w, 52), 24, 24)   # muesca superior
-        p.fillPath(body.subtracted(cut), QBrush(self.fill))
+        if self.notch:
+            w = min(150.0, r.width() * 0.5)
+            cut = QPainterPath()
+            cut.addRoundedRect(QRectF(r.center().x() - w / 2, r.top() - 30, w, 52), 24, 24)   # muesca superior
+            body = body.subtracted(cut)
+        p.fillPath(body, QBrush(self.fill))
+        if self.edge:
+            p.setPen(QPen(QColor(self.edge), 1))
+            p.drawPath(body)

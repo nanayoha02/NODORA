@@ -13,7 +13,7 @@ from ..core.config import Settings
 from ..core.session import tcp_probe
 from ..core.validators import ValidationError, validate_host, validate_port, validate_student_id
 from . import theme
-from .widgets import (Card, Msg, PastelTile, Pill, Sparkline, eyebrow, fill_table, fmt_bytes, fmt_uptime, make_table, muted,
+from .widgets import (Card, Msg, DonutGauge, PastelTile, Pill, Sparkline, eyebrow, fill_table, fmt_bytes, fmt_uptime, make_table, muted,
                       run_async)
 
 
@@ -141,6 +141,10 @@ class DashboardPage(Page):
         s = muted(sub)
         c.add(n)
         c.add(s)
+        if theme.palette().get("tabs"):
+            g = DonutGauge()
+            c.add(g)
+            return n, s, (c, g)
         if bar:
             pb = QProgressBar()
             pb.setRange(0, 100)

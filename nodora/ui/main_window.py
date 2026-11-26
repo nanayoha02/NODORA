@@ -1,22 +1,24 @@
 """Ventana principal: barra lateral, barra de contexto, páginas y muestreo periódico."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QProcess, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QIcon, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu,
                                QMessageBox, QPushButton, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget)
 
 from ..core.config import APP_NAME
 from . import theme
+from .icons import make_icon
 from .pages_a import ConnectionPage, DashboardPage, MonitorPage
 from .pages_b import FilesPage, NetworkPage
 from .pages_c import HistoryPage, SettingsPage
 from .pages_d import TrafficPage
 from .state import AppState
-from .widgets import Pill, muted, run_async
+from .widgets import Pill, elevate, muted, run_async
 
-NAV = [("Panel principal", "▦"), ("Conexión SSH", "›_"), ("Monitoreo", "∿"), ("Red y servicios", "⌗"),
-       ("Tráfico de red", "≈"), ("Archivos y mantenimiento", "▭"), ("Historial e informes", "↺"), ("Configuración", "⚙")]
+NAV = [("Panel principal", "dash"), ("Conexión SSH", "ssh"), ("Monitoreo", "monitor"), ("Red y servicios", "network"),
+       ("Tráfico de red", "traffic"), ("Archivos y mantenimiento", "files"), ("Historial e informes", "history"),
+       ("Configuración", "settings")]
 
 
 class MainWindow(QMainWindow):
@@ -47,16 +49,31 @@ class MainWindow(QMainWindow):
         sb.setObjectName("sidebar")
         sb.setFixedWidth(92 if self.rail else 250)
         sv = QVBoxLayout(sb)
-        sv.setContentsMargins((20, 26, 20, 20) if self.rail else (18, 24, 18, 18))
+        sv.setContentsMargins(*((20, 26, 20, 20) if self.rail else ((0, 0, 0, 22) if pal.get("tabs") else (18, 24, 18, 18))))
         sv.setSpacing(10 if self.rail else 4)
         if self.rail:
             brand = QLabel(f'N<span style="color:{pal["accent"]};">●</span>')
         else:
-            brand = QLabel(f'{APP_NAME} <span style="color:{pal["accent"]};">●</span>')
+            brand = QLabel(f'{APP_NAME} <span style="color:{pal.get("brand_dot") or pal["accent"]};">●</span>')
         brand.setObjectName("brand")
         brand.setTextFormat(Qt.RichText)
         brand.setToolTip(f"{APP_NAME} · Remote System Management")
-        sv.addWidget(brand, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
+        if pal.get("tabs"):
+            # bloque de marca en la esquina (esquina inferior derecha redondeada); el menú va debajo con su propio margen
+            block = QFrame()
+            block.setObjectName("brandblock")
+            block.setFixedHeight(88)
+            bl = QHBoxLayout(block)
+            bl.setContentsMargins(26, 0, 24, 0)
+            bl.addWidget(brand)
+            sv.addWidget(block)
+            inner = QVBoxLayout()
+            inner.setContentsMargins(20, 22, 0, 4)
+            inner.setSpacing(4)
+            sv.addLayout(inner, 1)
+            sv = inner
+        else:
+            sv.addWidget(brand, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
         if not self.rail:
             sub = QLabel("REMOTE SYSTEM MANAGEMENT")
             sub.setObjectName("eyebrow")
@@ -71,7 +88,9 @@ class MainWindow(QMainWindow):
         self.group.setExclusive(True)
         self.buttons = []
         for i, (name, ico) in enumerate(NAV):
-            b = QPushButton(ico if self.rail else f"{ico}   {name}")
+            b = QPushButton("" if self.rail else name)
+            b.setIcon(make_icon(ico, pal.get("nav_fg") or pal["muted"], pal.get("nav_active_fg") or pal["accent_text"], 22))
+            b.setIconSize(QSize(22, 22))
             b.setObjectName("rail" if self.rail else "nav")
             b.setToolTip(name)
             b.setAccessibleName(name)
@@ -79,7 +98,7 @@ class MainWindow(QMainWindow):
             b.setCursor(Qt.PointingHandCursor)
             self.group.addButton(b, i)
             self.buttons.append(b)
-            sv.addWidget(b, alignment=Qt.AlignHCenter if self.rail else Qt.AlignLeft)
+            sv.addWidget(b, alignment=Qt.AlignHCenter) if self.rail else sv.addWidget(b)   # en modo etiquetas el botón ocupa todo el ancho
         sv.addStretch()
         if not self.rail:
             tg = QLabel("Your System.\nOur Control.")
@@ -109,6 +128,7 @@ class MainWindow(QMainWindow):
         tl.addWidget(self.lbl_state)
         wrap = QVBoxLayout()
         wrap.setContentsMargins(26, 14, 26, 0)
+        elevate(self.top, 22, 5)
         wrap.addWidget(self.top)
         right.addLayout(wrap)
         self.stack = QStackedWidget()
@@ -125,7 +145,8 @@ class MainWindow(QMainWindow):
         self.buttons[0].setChecked(True)
         self.pages[0].goto_history.connect(lambda: self.go(6))
         self.pages[1].connection_changed.connect(self._connection)
-        self.pages[7].theme_changed.connect(self.apply_theme)
+        self._theme_applied = state.cfg.style_key()
+        self.pages[7].theme_changed.connect(self._theme_changed)
         s.identity_changed.connect(self._refresh_top)
         s.hostkey_request.connect(self._hostkey)
         s.sample.connect(lambda d: [p.on_sample(d) for p in self.pages])
@@ -249,10 +270,26 @@ class MainWindow(QMainWindow):
         box["ev"].set()
 
     # ---- tema
+    def _theme_changed(self):
+        """Barra lateral, tarjetas y botones se construyen según el tema, así que aplicarlo por completo exige reiniciar."""
+        if self.state.cfg.style_key() == self._theme_applied:
+            return
+        if QMessageBox.question(self, "Aplicar estilo", "Para aplicar el estilo por completo NODORA se reiniciará "
+                                "y cerrará la conexión actual. ¿Reiniciar ahora?") != QMessageBox.Yes:
+            return
+        import os
+        import sys
+        if getattr(sys, "frozen", False):
+            prog, args = sys.executable, sys.argv[1:]
+        else:
+            prog, args = sys.executable, ["-m", "nodora"] + sys.argv[1:]
+        QProcess.startDetached(prog, args, os.getcwd())
+        self._quit()
+
     def apply_theme(self):
         dark = QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark \
             if hasattr(QGuiApplication.styleHints(), "colorScheme") else False
-        theme.set_theme(self.state.cfg.theme, dark)
+        theme.apply_config(self.state.cfg, dark)
         QApplication.instance().setStyleSheet(theme.stylesheet())
         for p in self.pages:
             p.update()

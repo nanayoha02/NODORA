@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QProgr
 from ..core.validators import ValidationError
 from ..ops import traffic
 from .pages_a import Page
+from .orb import NetworkOrb
 from .widgets import Card, Msg, RateChart, eyebrow, fill_table, fmt_bytes, fmt_rate, make_table, muted, run_async
 
 MAX_ROWS = 1000
@@ -27,6 +28,13 @@ class TrafficPage(Page):
         self._busy = False
         self.packets: list = []
         self.last_local = ""
+
+        # ---- red viva: animación alimentada con el tráfico y las conexiones reales
+        vivo = Card("Red viva", "El anillo se acelera y se deforma con los bytes/s reales; los nodos son las conexiones TCP reales de BOSGAME", shadow=False)
+        self.orb = NetworkOrb()
+        vivo.add(self.orb)
+        self.col.addWidget(vivo)
+        self._ticks = 0
 
         # ---- en vivo (26)
         live = Card("Tráfico en vivo", "Acción 26 · bytes por segundo calculados con el tiempo real entre lecturas")
@@ -133,11 +141,13 @@ class TrafficPage(Page):
         if self.timer.isActive():
             self.timer.stop()
             self.b_start.setText("Iniciar")
+            self.orb.set_idle()
             return
         if not self.lab():
             return
         self.mon.reset()
         self.chart.clear()
+        self._ticks = 0
         self.timer.start(1000)
         self.b_start.setText("Detener")
         self._tick()
@@ -173,11 +183,19 @@ class TrafficPage(Page):
                 self.iface.blockSignals(False)
             r = self.mon.update(counters, t, self.iface.currentData() or "")
             if r:
+                self.orb.set_rates(r.rx_bps, r.tx_bps)
                 self.chart.push(r.rx_bps, r.tx_bps)
                 self.n_rx.setText(f"↓ {fmt_rate(r.rx_bps)}")
                 self.n_tx.setText(f"↑ {fmt_rate(r.tx_bps)}")
                 self.lbl_tot.setText(f"Desde que inició: recibido {fmt_bytes(self.mon.total_rx)} · enviado {fmt_bytes(self.mon.total_tx)} · "
                                      f"pico ↓ {fmt_rate(self.mon.peak_rx)} ↑ {fmt_rate(self.mon.peak_tx)}")
+
+        self._ticks += 1
+        if self._ticks % 6 == 1:                 # cada ~6 s refresca los nodos (lectura silenciosa: no ensucia el historial)
+            def cjob():
+                with lab.quiet():
+                    return traffic.connections(lab)
+            run_async(cjob, lambda r: self.orb.set_connections(r.data) if r.ok else None, lambda m: None)
 
         def err(m):
             self._busy = False
@@ -193,6 +211,7 @@ class TrafficPage(Page):
     def _conns(self):
         def done(r):
             if r.ok:
+                self.orb.set_connections(r.data)
                 fill_table(self.conns, [(c["local"], c["remote"], c["pid"] or "—", c["process"] or "—") for c in r.data])
             else:
                 Msg.warn(self, r.message)
